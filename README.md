@@ -1,1 +1,1 @@
-# GIL_resources
+# Training_Resources
