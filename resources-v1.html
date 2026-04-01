@@ -99,12 +99,52 @@
     gap: 16px;
   }
 
-  .pdf-wrapper canvas {
-    max-width: 100%;
-    height: auto !important;
+  .page-container {
+    position: relative;
+    display: inline-block;
+  }
+
+  .page-container canvas {
+    display: block;
     border: 1px solid #dde3eb;
     border-radius: 8px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+
+  .annotationLayer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    opacity: 1;
+    line-height: 1;
+  }
+
+  .annotationLayer section {
+    position: absolute;
+    cursor: pointer;
+  }
+
+  .annotationLayer .linkAnnotation > a,
+  .annotationLayer .buttonWidgetAnnotation.pushButton > a {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    font-size: 1em;
+  }
+
+  .annotationLayer .linkAnnotation > a:hover,
+  .annotationLayer .buttonWidgetAnnotation.pushButton > a:hover {
+    background: rgba(255, 255, 0, 0.2);
+    border-radius: 2px;
+  }
+
+  .annotationLayer .linkAnnotation > a {
+    cursor: pointer;
   }
 
   .loading {
@@ -143,12 +183,12 @@
     .pdf-wrapper { padding: 12px; }
   }
 </style>
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-LBLJZRLG4K"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-WW0Y11VR81"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', 'G-LBLJZRLG4K');
+  gtag('config', 'G-WW0Y11VR81');
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -201,20 +241,96 @@
     rendering = true;
 
     pdfDoc.getPage(num).then(function(page) {
-      wrapper.querySelectorAll('canvas').forEach(c => c.remove());
+      var old = wrapper.querySelector('.page-container');
+      if (old) old.remove();
 
-      const viewport = page.getViewport({ scale: 1 });
-      const containerWidth = Math.min(wrapper.clientWidth - 48, 850);
-      const scale = containerWidth / viewport.width;
-      const scaledViewport = page.getViewport({ scale: scale });
+      var viewport = page.getViewport({ scale: 1 });
+      var containerWidth = Math.min(wrapper.clientWidth - 48, 850);
+      var scale = containerWidth / viewport.width;
+      var scaledViewport = page.getViewport({ scale: scale });
 
-      const canvas = document.createElement('canvas');
+      var pageContainer = document.createElement('div');
+      pageContainer.className = 'page-container';
+      pageContainer.style.width = scaledViewport.width + 'px';
+      pageContainer.style.height = scaledViewport.height + 'px';
+
+      var canvas = document.createElement('canvas');
       canvas.width = scaledViewport.width;
       canvas.height = scaledViewport.height;
-      wrapper.appendChild(canvas);
+      pageContainer.appendChild(canvas);
 
-      const ctx = canvas.getContext('2d');
+      wrapper.appendChild(pageContainer);
+
+      var ctx = canvas.getContext('2d');
+
       page.render({ canvasContext: ctx, viewport: scaledViewport }).promise.then(function() {
+        return page.getAnnotations();
+      }).then(function(annotations) {
+        var annotDiv = document.createElement('div');
+        annotDiv.className = 'annotationLayer';
+        annotDiv.style.width = scaledViewport.width + 'px';
+        annotDiv.style.height = scaledViewport.height + 'px';
+
+        annotations.forEach(function(ann) {
+          if (ann.subtype === 'Link' && ann.url) {
+            var rect = scaledViewport.convertToViewportRectangle(ann.rect);
+            var x = Math.min(rect[0], rect[2]);
+            var y = Math.min(rect[1], rect[3]);
+            var w = Math.abs(rect[2] - rect[0]);
+            var h = Math.abs(rect[3] - rect[1]);
+
+            var section = document.createElement('section');
+            section.className = 'linkAnnotation';
+            section.style.left = x + 'px';
+            section.style.top = y + 'px';
+            section.style.width = w + 'px';
+            section.style.height = h + 'px';
+
+            var link = document.createElement('a');
+            link.href = ann.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.title = ann.url;
+
+            section.appendChild(link);
+            annotDiv.appendChild(section);
+          }
+
+          if (ann.subtype === 'Link' && ann.dest && !ann.url) {
+            var rect2 = scaledViewport.convertToViewportRectangle(ann.rect);
+            var x2 = Math.min(rect2[0], rect2[2]);
+            var y2 = Math.min(rect2[1], rect2[3]);
+            var w2 = Math.abs(rect2[2] - rect2[0]);
+            var h2 = Math.abs(rect2[3] - rect2[1]);
+
+            var section2 = document.createElement('section');
+            section2.className = 'linkAnnotation';
+            section2.style.left = x2 + 'px';
+            section2.style.top = y2 + 'px';
+            section2.style.width = w2 + 'px';
+            section2.style.height = h2 + 'px';
+
+            var link2 = document.createElement('a');
+            link2.href = '#';
+            link2.title = 'Go to linked section';
+            link2.addEventListener('click', (function(destination) {
+              return function(e) {
+                e.preventDefault();
+                pdfDoc.getPageIndex(destination[0]).then(function(pageIdx) {
+                  currentPage = pageIdx + 1;
+                  renderPage(currentPage);
+                  wrapper.scrollTo({ top: 0, behavior: 'smooth' });
+                });
+              };
+            })(ann.dest));
+
+            section2.appendChild(link2);
+            annotDiv.appendChild(section2);
+          }
+        });
+
+        pageContainer.appendChild(annotDiv);
+
         rendering = false;
         pageInfo.textContent = 'Page ' + num + ' of ' + pdfDoc.numPages;
         prevBtn.disabled = (num <= 1);
