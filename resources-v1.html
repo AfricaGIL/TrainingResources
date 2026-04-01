@@ -99,6 +99,7 @@
     gap: 16px;
   }
 
+  /* Page container holds canvas + annotation layer */
   .page-container {
     position: relative;
     display: inline-block;
@@ -111,6 +112,7 @@
     box-shadow: 0 2px 12px rgba(0,0,0,0.06);
   }
 
+  /* PDF.js annotation layer styles */
   .annotationLayer {
     position: absolute;
     top: 0;
@@ -139,8 +141,7 @@
 
   .annotationLayer .linkAnnotation > a:hover,
   .annotationLayer .buttonWidgetAnnotation.pushButton > a:hover {
-    background: rgba(255, 255, 0, 0.2);
-    border-radius: 2px;
+    background: transparent;
   }
 
   .annotationLayer .linkAnnotation > a {
@@ -183,12 +184,12 @@
     .pdf-wrapper { padding: 12px; }
   }
 </style>
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-WW0Y11VR81"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-LBLJZRLG4K"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', 'G-WW0Y11VR81');
+  gtag('config', 'G-LBLJZRLG4K');
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -241,6 +242,7 @@
     rendering = true;
 
     pdfDoc.getPage(num).then(function(page) {
+      // Remove previous page container
       var old = wrapper.querySelector('.page-container');
       if (old) old.remove();
 
@@ -249,11 +251,13 @@
       var scale = containerWidth / viewport.width;
       var scaledViewport = page.getViewport({ scale: scale });
 
+      // Create page container
       var pageContainer = document.createElement('div');
       pageContainer.className = 'page-container';
       pageContainer.style.width = scaledViewport.width + 'px';
       pageContainer.style.height = scaledViewport.height + 'px';
 
+      // Create and render canvas
       var canvas = document.createElement('canvas');
       canvas.width = scaledViewport.width;
       canvas.height = scaledViewport.height;
@@ -263,15 +267,19 @@
 
       var ctx = canvas.getContext('2d');
 
+      // Render the page
       page.render({ canvasContext: ctx, viewport: scaledViewport }).promise.then(function() {
+        // Get annotations and build clickable link layer
         return page.getAnnotations();
       }).then(function(annotations) {
+        // Create annotation layer div
         var annotDiv = document.createElement('div');
         annotDiv.className = 'annotationLayer';
         annotDiv.style.width = scaledViewport.width + 'px';
         annotDiv.style.height = scaledViewport.height + 'px';
 
         annotations.forEach(function(ann) {
+          // Handle URL links
           if (ann.subtype === 'Link' && ann.url) {
             var rect = scaledViewport.convertToViewportRectangle(ann.rect);
             var x = Math.min(rect[0], rect[2]);
@@ -296,6 +304,7 @@
             annotDiv.appendChild(section);
           }
 
+          // Handle internal page links (GoTo destinations)
           if (ann.subtype === 'Link' && ann.dest && !ann.url) {
             var rect2 = scaledViewport.convertToViewportRectangle(ann.rect);
             var x2 = Math.min(rect2[0], rect2[2]);
